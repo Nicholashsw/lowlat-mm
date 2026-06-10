@@ -1,0 +1,9 @@
+build/
+*.o
+*.a
+*.out
+cmake-build-*/
+.DS_Store
+pnl.csv
+trades.csv
+*.log
