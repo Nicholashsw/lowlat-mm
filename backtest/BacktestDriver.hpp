@@ -58,10 +58,15 @@ public:
     // queue drains.
     BacktestResult run(const std::vector<TopOfBookEvent>& md);
 
-private:
-    void on_oms_outbound(const Event& e);    // OMS -> sim, with latency
-    void on_sim_outbound(Timestamp ts, Event e); // sim -> OMS, with latency
+    // Called by the OMS via its send callback. Schedules the event at the
+    // exchange with strategy->exchange latency added.
+    void accept_oms_event(const Event& e);
 
+    // Called by the simulator via its emit callback. Schedules the event at
+    // the strategy with exchange->strategy latency added.
+    void accept_sim_event(Timestamp emitted_ts, Event e);
+
+private:
     void dispatch(Timestamp ts, const Event& e);
     void record_pnl_sample(Timestamp ts);
     void write_trade(const FillEvent& f);

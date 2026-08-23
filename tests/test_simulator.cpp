@@ -58,31 +58,50 @@ TEST_CASE("marketable buy fills immediately at best_ask", "[sim]") {
     REQUIRE(fill->is_final);
 }
 
-TEST_CASE("resting bid does not fill at the touch, only when market trades through",
-          "[sim]") {
-    SimulatorConfig cfg; cfg.ack_latency_ns = 10; cfg.fill_latency_ns = 20;
+TEST_CASE("strict trade-through rule (fill_on_touch=false)", "[sim]") {
+    SimulatorConfig cfg;
+    cfg.ack_latency_ns = 10; cfg.fill_latency_ns = 20;
+    cfg.fill_on_touch = false;
     Capture cap;
     ExchangeSimulator sim(cfg, cap.fn());
 
-    // Initial book
     sim.on_market_data(TopOfBookEvent{500, 0, 9998, 100, 10000, 100});
 
-    // Place resting buy at 9999 -- NOT marketable.
     NewOrderEvent n{1, 1000, 0, Side::Buy, 9999, 5};
     sim.on_new_order(n);
 
-    // Market ticks: ask drops TO 9999. Our passive rule requires STRICT
-    // improvement through our price, so no fill yet.
+    // Ask drops TO our bid: under strict rule, no fill.
     sim.on_market_data(TopOfBookEvent{2000, 0, 9997, 100, 9999, 100});
     REQUIRE(cap.find<FillEvent>() == nullptr);
 
-    // Now ask goes BELOW our bid: market traded through -> fill at our px.
+    // Ask drops BELOW our bid: market traded through, fill.
     sim.on_market_data(TopOfBookEvent{3000, 0, 9996, 100, 9998, 100});
     auto* fill = cap.find<FillEvent>();
     REQUIRE(fill != nullptr);
     REQUIRE(fill->id == 1);
-    REQUIRE(fill->px == 9999);   // fill at our limit
+    REQUIRE(fill->px == 9999);
     REQUIRE(fill->qty == 5);
+}
+
+TEST_CASE("fill-on-touch rule (default) fills when market reaches our price",
+          "[sim]") {
+    SimulatorConfig cfg;
+    cfg.ack_latency_ns = 10; cfg.fill_latency_ns = 20;
+    // fill_on_touch defaults to true.
+    Capture cap;
+    ExchangeSimulator sim(cfg, cap.fn());
+
+    sim.on_market_data(TopOfBookEvent{500, 0, 9998, 100, 10000, 100});
+
+    NewOrderEvent n{1, 1000, 0, Side::Buy, 9999, 5};
+    sim.on_new_order(n);
+
+    // Ask drops to our bid: fills under fill-on-touch.
+    sim.on_market_data(TopOfBookEvent{2000, 0, 9997, 100, 9999, 100});
+    auto* fill = cap.find<FillEvent>();
+    REQUIRE(fill != nullptr);
+    REQUIRE(fill->id == 1);
+    REQUIRE(fill->px == 9999);
 }
 
 TEST_CASE("cancel before fill acks accepted; cancel after fill acks rejected",

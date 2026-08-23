@@ -14,26 +14,25 @@ BacktestDriver::BacktestDriver(BacktestConfig cfg,
     : cfg_(cfg), strat_(std::move(strat)), oms_(oms), risk_(risk), sim_(sim),
       book_(cfg.sym) {}
 
-void BacktestDriver::on_oms_outbound(const Event& e) {
-    // Called synchronously when the strategy submits/cancels. We schedule
-    // arrival at the simulator after strategy_to_exchange_latency.
+void BacktestDriver::accept_oms_event(const Event& e) {
+    // Called synchronously when the strategy submits/cancels via the OMS.
+    // We add strategy->exchange latency and push onto the event bus.
     std::visit([this](auto&& ev) {
         using T = std::decay_t<decltype(ev)>;
-        Timestamp arrival = ev.ts + cfg_.strategy_to_exchange_latency_ns;
-        if constexpr (std::is_same_v<T, NewOrderEvent>) {
-            auto e2 = ev; e2.ts = arrival;
-            bus_.push(arrival, Event{e2});
-        } else if constexpr (std::is_same_v<T, CancelOrderEvent>) {
+        if constexpr (std::is_same_v<T, NewOrderEvent> ||
+                      std::is_same_v<T, CancelOrderEvent>) {
+            Timestamp arrival = ev.ts + cfg_.strategy_to_exchange_latency_ns;
             auto e2 = ev; e2.ts = arrival;
             bus_.push(arrival, Event{e2});
         }
     }, e);
 }
 
-void BacktestDriver::on_sim_outbound(Timestamp ts, Event e) {
-    // Simulator emits at ts; OMS sees it after exchange_to_strategy_latency.
-    Timestamp arrival = ts + cfg_.exchange_to_strategy_latency_ns;
-    std::visit([&](auto& ev) { ev.ts = arrival; }, e);
+void BacktestDriver::accept_sim_event(Timestamp emitted_ts, Event e) {
+    // Simulator emits at emitted_ts; strategy/OMS sees it after
+    // exchange->strategy latency.
+    Timestamp arrival = emitted_ts + cfg_.exchange_to_strategy_latency_ns;
+    std::visit([arrival](auto& ev) { ev.ts = arrival; }, e);
     bus_.push(arrival, std::move(e));
 }
 

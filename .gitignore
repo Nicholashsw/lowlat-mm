@@ -7,3 +7,7 @@ cmake-build-*/
 pnl.csv
 trades.csv
 *.log
+
+# Generated charts (tools/plot_pnl.py defaults to pnl.png); docs images are kept.
+*.png
+!docs/*.png

@@ -62,6 +62,10 @@ public:
 
     explicit OMS(SendFn send) : send_(std::move(send)) {}
 
+    // Rebind the outbound callback after construction. Used by the backtest
+    // driver to break the OMS <-> driver construction cycle.
+    void set_send(SendFn send) { send_ = std::move(send); }
+
     // --- strategy-facing API ------------------------------------------------
     // Returns the new OrderId. The order starts in PendingNew.
     OrderId submit(Timestamp ts, SymbolId sym, Side side, Price px, Qty qty);

@@ -79,6 +79,7 @@ int main(int argc, char** argv) {
     SimulatorConfig sim_cfg{};
     sim_cfg.ack_latency_ns  = cfg.get_int("ack_latency_ns", 50'000);
     sim_cfg.fill_latency_ns = cfg.get_int("fill_latency_ns", 50'000);
+    sim_cfg.fill_on_touch   = cfg.get_bool("fill_on_touch", true);
 
     // --- Risk limits ------------------------------------------------------
     RiskLimits lim{};

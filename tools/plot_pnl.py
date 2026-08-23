@@ -3,7 +3,7 @@
 Plot the PnL/inventory time series produced by run_backtest.
 
 Usage:
-    python3 scripts/plot_pnl.py [pnl.csv] [--out pnl.png]
+    python3 tools/plot_pnl.py [pnl.csv] [--out pnl.png]
 
 Renders three stacked panels: mid, net position, total PnL. Uses
 matplotlib only — no other dependencies.

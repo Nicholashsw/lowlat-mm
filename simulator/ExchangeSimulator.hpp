@@ -41,6 +41,16 @@ struct SimulatorConfig {
     Timestamp ack_latency_ns   = 50'000;   // 50 microseconds
     Timestamp fill_latency_ns  = 50'000;
     bool      allow_marketable = true;
+    // Passive-fill rule for resting orders.
+    //  - true  (default): "fill on touch" — a resting BUY at p fills when
+    //                     best_ask <= p; a resting SELL at p fills when
+    //                     best_bid >= p. Realistic for an order that
+    //                     improves the visible book (queue-priority winner).
+    //                     Optimistic for an order sitting at the touch.
+    //  - false: "trade through only" — strict inequality. Conservative;
+    //                     resting orders only fill when the market clearly
+    //                     prints through them.
+    bool      fill_on_touch    = true;
 };
 
 class ExchangeSimulator {

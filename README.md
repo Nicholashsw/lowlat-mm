@@ -112,7 +112,8 @@ Optional outputs (configured in the `.ini`): a PnL/inventory time series
 
 ## Sample output
 
-Running on `data/sample_feed.csv` with the default config:
+Running `./build/run_backtest data/default.ini data/sample_feed.csv` on the
+committed feed with the default config:
 
 ```
 # loaded 5000 md events for symbol TEST
@@ -120,16 +121,21 @@ Running on `data/sample_feed.csv` with the default config:
 === Backtest summary ===
 symbol              : TEST
 md events           : 5000
-orders submitted    : 8674
-fills               : 290
-ending position     : 0
-last mid (ticks)    : 9976
-realized PnL        : -85.6333  (-8563.3333 ticks)
-unrealized PnL      : 0.0000  (0.0000 ticks)
-total PnL           : -85.6333  (-8563.3333 ticks)
-max drawdown        : 86.1333  (8613.3333 ticks)
+orders submitted    : 6157
+fills               : 53
+ending position     : -10
+last mid (ticks)    : 9992
+realized PnL        : -2.2500  (-225.0000 ticks)
+unrealized PnL      : -0.3000  (-30.0000 ticks)
+total PnL           : -2.5500  (-255.0000 ticks)
+max drawdown        : 7.2500  (725.0000 ticks)
 kill switch tripped : no
 ```
+
+These numbers are exactly reproducible. `data/sample_feed.csv` is committed, and
+`tools/generate_feed.py` regenerates it byte-for-byte from a fixed seed
+(`random.Random(42)`, 5000 events); the engine itself is deterministic because
+every event is ordered on a single timestamp-priority queue.
 
 Negative PnL is expected here. See *Limitations* below — this is a real
 adverse-selection effect, not a bug.
@@ -249,27 +255,77 @@ Roughly in order of value-for-effort:
 
 ```
 .
+├── .gitignore
 ├── CMakeLists.txt
+├── LICENSE
 ├── README.md
-├── apps/run_backtest.cpp      # CLI entry point
-├── backtest/                  # event-loop driver
-├── core/                      # types, events, bus, logger, config
+├── apps/
+│   └── run_backtest.cpp            # CLI entry point
+├── backtest/
+│   ├── BacktestDriver.cpp          # event loop, PnL series, blotter
+│   └── BacktestDriver.hpp
+├── core/
+│   ├── Config.hpp                  # flat key=value .ini reader
+│   ├── EventBus.hpp                # timestamp-ordered priority queue
+│   ├── Events.cpp
+│   ├── Events.hpp                  # std::variant event set
+│   ├── Logger.hpp
+│   └── Types.hpp                   # tick-int prices, ids, timestamps
 ├── data/
-│   ├── default.ini            # baseline config
-│   ├── sample_feed.csv        # noisy random walk
-│   ├── stable_feed.csv        # 1-tick jitter (smoke test)
-│   └── oscillating_feed.csv   # sine wave (MM-friendly)
-├── docs/architecture.md       # extended design notes
-├── execution/                 # OMS + position tracking
-├── market_data/               # CSV reader, symbol table
-├── orderbook/                 # top of book + depth
-├── risk/                      # pre-trade gate, kill switch
-├── scripts/                   # synthetic feed generators, plotting
-├── simulator/                 # exchange simulator
-├── strategy/                  # base + market-maker
-├── tests/                     # Catch2 unit tests
-└── third_party/catch.hpp      # vendored single-header Catch2 v2
+│   ├── default.ini                 # baseline config
+│   ├── aggressive.ini              # tighter quoting variants
+│   ├── patient.ini
+│   ├── short_patient.ini
+│   ├── v_patient.ini
+│   ├── tight.ini
+│   ├── wide.ini
+│   ├── debug.ini                   # trace-level logging
+│   ├── sample_feed.csv             # noisy random walk
+│   ├── stable_feed.csv             # 1-tick jitter (smoke test)
+│   └── oscillating_feed.csv        # sine wave (MM-friendly)
+├── docs/
+│   └── architecture.md             # extended design notes
+├── execution/
+│   ├── OMS.cpp                     # order state machine, position, PnL
+│   └── OMS.hpp
+├── market_data/
+│   ├── CsvFeedReader.cpp           # CSV reader, symbol interning
+│   └── CsvFeedReader.hpp
+├── orderbook/
+│   ├── OrderBook.cpp               # top of book + depth
+│   └── OrderBook.hpp
+├── risk/
+│   ├── RiskManager.cpp             # pre-trade gate, kill switch
+│   └── RiskManager.hpp
+├── simulator/
+│   ├── ExchangeSimulator.cpp       # ack latency, fill rules
+│   └── ExchangeSimulator.hpp
+├── strategy/
+│   ├── MarketMaker.cpp             # inventory-aware market maker
+│   ├── MarketMaker.hpp
+│   └── Strategy.hpp                # base interface
+├── tests/
+│   ├── test_main.cpp               # Catch2 main
+│   ├── test_oms.cpp
+│   ├── test_orderbook.cpp
+│   ├── test_risk.cpp
+│   ├── test_simulator.cpp
+│   └── test_strategy.cpp
+├── third_party/
+│   └── catch.hpp                   # vendored single-header Catch2 v2.13.10
+└── tools/
+    ├── generate_feed.py            # synthetic feed generators (seeded)
+    ├── generate_oscillating_feed.py
+    ├── generate_stable_feed.py
+    └── plot_pnl.py                 # pnl.csv -> chart
 ```
+
+## Third-party
+
+`third_party/catch.hpp` is the vendored single-header
+[Catch2](https://github.com/catchorg/Catch2) v2.13.10 test framework, used
+unmodified under the Boost Software License 1.0. Everything else in this
+repository is covered by [`LICENSE`](LICENSE) (MIT).
 
 ---
 

@@ -59,17 +59,22 @@ void ExchangeSimulator::on_market_data(const TopOfBookEvent& md) {
 
 void ExchangeSimulator::maybe_fill_against_book(Resting& r, Timestamp ts) {
     auto& book = books_[r.ev.sym];
-    // Passive fill rule: resting order fills only if the market trades
-    // THROUGH it (strict inequality), not AT the touch. This avoids
-    // over-optimistic fills for a market maker.
-    if (r.ev.side == Side::Buy && book.has_ask() && book.best_ask() < r.ev.px) {
-        // Market traded through our bid.
+    // Passive fill rule. See SimulatorConfig::fill_on_touch for the choice
+    // between "fill on touch" (<=) and "trade through only" (<).
+    auto cmp_buy  = [&](Price ask){
+        return cfg_.fill_on_touch ? (ask <= r.ev.px) : (ask <  r.ev.px);
+    };
+    auto cmp_sell = [&](Price bid){
+        return cfg_.fill_on_touch ? (bid >= r.ev.px) : (bid >  r.ev.px);
+    };
+
+    if (r.ev.side == Side::Buy && book.has_ask() && cmp_buy(book.best_ask())) {
         Qty fill = r.leaves;
         emit_fill(r, r.ev.px, fill, ts + cfg_.fill_latency_ns, true);
         resting_.erase(r.ev.id);
         return;
     }
-    if (r.ev.side == Side::Sell && book.has_bid() && book.best_bid() > r.ev.px) {
+    if (r.ev.side == Side::Sell && book.has_bid() && cmp_sell(book.best_bid())) {
         Qty fill = r.leaves;
         emit_fill(r, r.ev.px, fill, ts + cfg_.fill_latency_ns, true);
         resting_.erase(r.ev.id);

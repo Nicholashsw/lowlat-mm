@@ -10,6 +10,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <optional>
+#include <algorithm>
+#include <cctype>
 
 namespace lmm {
 

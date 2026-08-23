@@ -10,6 +10,7 @@
 #include <chrono>
 #include <string>
 #include <ostream>
+#include <limits>
 
 namespace lmm {
 
