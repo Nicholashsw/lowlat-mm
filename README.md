@@ -143,7 +143,7 @@ adverse-selection effect, not a bug.
 ## Tests
 
 ```bash
-./build/unit_tests           # 28 cases, ~109 assertions
+./build/unit_tests           # 30 cases, 119 assertions
 ctest --test-dir build       # equivalent through CTest
 ```
 
@@ -151,7 +151,8 @@ Coverage includes order book updates, OMS state transitions and PnL
 attribution, risk gate rejections (max position/order/open qty/drawdown,
 kill switch), simulator fill rules under both passive-fill modes, and
 strategy behaviour (no quotes on crossed/one-sided books, symmetric
-quoting, inventory skew direction, max-position side suppression).
+quoting, inventory skew direction, max-position side suppression, and
+cancel-timestamp propagation on both `cancel_all()` routes).
 
 ## Configuration
 

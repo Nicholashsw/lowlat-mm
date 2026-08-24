@@ -45,7 +45,11 @@ public:
     const char* name() const override { return "MarketMaker"; }
 
 private:
-    void cancel_all();
+    // ts is the simulated time of the event that triggered the cancel.
+    // It must be a real event timestamp: the driver schedules the cancel at
+    // ts + strategy_to_exchange_latency, so passing 0 here would place the
+    // arrival in the past and pop it out of chronological order.
+    void cancel_all(Timestamp ts);
     void try_submit(Timestamp ts, Side side, Price px);
 
     MMConfig cfg_;

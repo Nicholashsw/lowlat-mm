@@ -10,17 +10,17 @@ void MarketMaker::on_market_data(const TopOfBookEvent& md,
                                  const OrderBook& book) {
     if (md.sym != cfg_.sym) return;
 
-    if (risk_.killed()) { cancel_all(); return; }
+    if (risk_.killed()) { cancel_all(md.ts); return; }
 
     if (!book.two_sided() || book.crossed()) {
-        cancel_all();
+        cancel_all(md.ts);
         return;
     }
 
     Price spread = book.spread();
     if (spread < cfg_.min_spread) {
         // Market tighter than we're willing to quote: stand down.
-        cancel_all();
+        cancel_all(md.ts);
         return;
     }
 
@@ -38,7 +38,7 @@ void MarketMaker::on_market_data(const TopOfBookEvent& md,
 
     // Sanity: keep bid < ask.
     if (target_bid >= target_ask) {
-        cancel_all();
+        cancel_all(md.ts);
         return;
     }
 
@@ -83,14 +83,14 @@ void MarketMaker::on_market_data(const TopOfBookEvent& md,
     }
 }
 
-void MarketMaker::cancel_all() {
+void MarketMaker::cancel_all(Timestamp ts) {
     if (live_bid_id_ != 0) {
-        oms_.cancel(0, live_bid_id_);
+        oms_.cancel(ts, live_bid_id_);
         live_bid_id_ = 0;
         live_bid_px_ = kInvalidPrice;
     }
     if (live_ask_id_ != 0) {
-        oms_.cancel(0, live_ask_id_);
+        oms_.cancel(ts, live_ask_id_);
         live_ask_id_ = 0;
         live_ask_px_ = kInvalidPrice;
     }

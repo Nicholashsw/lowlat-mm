@@ -30,6 +30,12 @@ struct Bus {
             if (auto* p = std::get_if<NewOrderEvent>(&e)) out.push_back(*p);
         return out;
     }
+    std::vector<CancelOrderEvent> cancels() const {
+        std::vector<CancelOrderEvent> out;
+        for (auto& e : events)
+            if (auto* p = std::get_if<CancelOrderEvent>(&e)) out.push_back(*p);
+        return out;
+    }
 };
 
 } // namespace
@@ -161,4 +167,75 @@ TEST_CASE("strategy stops quoting a side at max_position", "[strategy]") {
     }
     REQUIRE(bids == 0);
     REQUIRE(asks == 1);
+}
+
+TEST_CASE("cancel_all stamps cancels with the triggering event time",
+          "[strategy][regression]") {
+    // Regression: cancel_all() used to hardcode a timestamp of 0. The driver
+    // schedules a cancel at ts + strategy_to_exchange_latency, so a zero here
+    // produced an arrival time in the *past* relative to the simulation clock,
+    // which on a min-heap event bus pops immediately and out of chronological
+    // order. Every cancel must carry the timestamp of the market-data event
+    // that triggered it.
+    Bus bus;
+    OMS oms(bus.fn());
+    RiskLimits lim;
+    RiskManager risk(lim, oms);
+
+    MMConfig cfg; cfg.sym = 0; cfg.half_spread = 3; cfg.min_spread = 1;
+    cfg.quote_size = 5; cfg.inv_skew = 0.0;
+    MarketMaker mm(cfg, oms, risk);
+
+    constexpr Timestamp kQuoteTs  = 5'000'000'000;
+    constexpr Timestamp kCancelTs = 6'000'000'000;
+
+    // 1. Quote normally so that both sides are live.
+    OrderBook book(0);
+    book.apply_top(10000, 100, 10006, 100);
+    TopOfBookEvent md{kQuoteTs, 0, 10000, 100, 10006, 100};
+    mm.on_market_data(md, book);
+    REQUIRE(bus.count_new() == 2);
+
+    // 2. Crossed book -> cancel_all() path.
+    bus.events.clear();
+    OrderBook crossed(0);
+    crossed.apply_top(10005, 10, 10003, 10);
+    TopOfBookEvent md2{kCancelTs, 0, 10005, 10, 10003, 10};
+    mm.on_market_data(md2, crossed);
+
+    auto cans = bus.cancels();
+    REQUIRE(cans.size() == 2);
+    for (const auto& c : cans) {
+        REQUIRE(c.ts == kCancelTs);   // was 0 before the fix
+        REQUIRE(c.ts != 0);
+    }
+}
+
+TEST_CASE("kill switch cancels carry the triggering event time",
+          "[strategy][regression]") {
+    // The kill-switch branch is a second route into cancel_all().
+    Bus bus;
+    OMS oms(bus.fn());
+    RiskLimits lim;
+    RiskManager risk(lim, oms);
+
+    MMConfig cfg; cfg.sym = 0; cfg.half_spread = 3; cfg.min_spread = 1;
+    cfg.quote_size = 5; cfg.inv_skew = 0.0;
+    MarketMaker mm(cfg, oms, risk);
+
+    constexpr Timestamp kQuoteTs = 7'000'000'000;
+    constexpr Timestamp kKillTs  = 8'000'000'000;
+
+    OrderBook book(0);
+    book.apply_top(10000, 100, 10006, 100);
+    mm.on_market_data(TopOfBookEvent{kQuoteTs, 0, 10000, 100, 10006, 100}, book);
+    REQUIRE(bus.count_new() == 2);
+
+    bus.events.clear();
+    risk.kill("test");
+    mm.on_market_data(TopOfBookEvent{kKillTs, 0, 10000, 100, 10006, 100}, book);
+
+    auto cans = bus.cancels();
+    REQUIRE(cans.size() == 2);
+    for (const auto& c : cans) REQUIRE(c.ts == kKillTs);
 }
