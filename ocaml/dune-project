@@ -1,0 +1,17 @@
+(lang dune 3.0)
+
+(name lobsim)
+
+(generate_opam_files true)
+
+(license MIT)
+
+(authors "Nicholas Hong")
+
+(package
+ (name lobsim)
+ (synopsis "Price-time matching engine and queue-aware replay for lowlat-mm")
+ (depends
+  (ocaml (>= 4.14))
+  dune
+  (qcheck-core (and :with-test (>= 0.20)))))
