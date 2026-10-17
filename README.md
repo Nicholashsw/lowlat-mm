@@ -3,8 +3,8 @@
 A modular C++20 prototype of an event-driven market-making and execution engine,
 built for learning and as a portfolio piece. The goal is *not* a production
 HFT system; it is a clean educational implementation of the patterns you would
-find in one — order book, OMS, risk gate, exchange simulator, replay backtest
-— with realistic boundaries between modules and reasonable defaults.
+find in one (order book, OMS, risk gate, exchange simulator, replay backtest),
+with realistic boundaries between modules and reasonable defaults.
 
 The codebase is small enough to read in a sitting and structured to be
 extended (more strategies, deeper book, real feed plug-ins) without rewriting
@@ -65,8 +65,8 @@ better cache locality and explicit handling at every call site.
 
 Because reading "how does an exchange work" articles is no substitute for
 having a small, working, modifiable implementation. The interesting parts
-of trading-systems engineering — event ordering, order state machines,
-fill assumptions, latency modeling — only really click once you can change
+of trading-systems engineering (event ordering, order state machines,
+fill assumptions, latency modelling) only really click once you can change
 something and see it break.
 
 The same code structure also serves as a fair starting point for a real
@@ -87,9 +87,9 @@ cmake --build build -j
 ```
 
 This produces:
-- `build/run_backtest` — the CLI
-- `build/unit_tests` — Catch2 test binary
-- `build/liblowlat_mm_core.a` — the engine static library
+- `build/run_backtest`: the CLI
+- `build/unit_tests`: Catch2 test binary
+- `build/liblowlat_mm_core.a`: the engine static library
 
 ## Run
 
@@ -160,6 +160,9 @@ Read this number with care:
 - **Most of the gain is direction, not spread.** ES fell about 100 points
   that day and the strategy was net short for most of it (see the position
   panel). On a day that rallied the same way, the result would likely flip.
+- **It requotes far too often.** 556,508 orders for 77 fills, because it
+  requotes on nearly every top-of-book change. A real exchange's messaging
+  limits would not allow that.
 - One day, one contract, no fees.
 
 ## Tests
@@ -206,7 +209,7 @@ requote_thresh    = 1
 
 ## Limitations and assumptions
 
-This is an educational prototype. Honestly stated:
+This is an educational prototype. Its limits:
 
 1. **Top-of-book only.** The feed format is `(bid_px, bid_sz, ask_px, ask_sz)`.
    Depth, queue position, and hidden liquidity are not modelled. The
@@ -227,8 +230,8 @@ This is an educational prototype. Honestly stated:
    On a TOB feed without prints, both rules under-fill an MM that quotes
    *inside* the visible market, because the strategy will typically cancel
    and requote as the mid moves before the market catches up to the old
-   quote. This is the dominant reason the default backtest shows a loss:
-   the only way the simulated MM gets filled is when the market trades
+   quote. This is why so few quotes fill on the ES run (77 from 556,508
+   orders): the only way the simulated MM gets filled is when the market trades
    *to or through* an old quote it hasn't yet cancelled, which is by
    definition adverse selection.
 
