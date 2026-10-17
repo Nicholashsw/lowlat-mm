@@ -1,0 +1,4 @@
+(tests
+ (names test_engine test_replay)
+ (package lobsim)
+ (libraries lobsim qcheck-core qcheck-core.runner))
