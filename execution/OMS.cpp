@@ -132,14 +132,15 @@ void OMS::update_position_on_fill(SymbolId sym, Side side, Price px, Qty qty) {
             : (pos.avg_px_ticks - fill_px);      // closing a short
         pos.realized_pnl_ticks += pnl_per_unit * static_cast<double>(closing);
 
+        const Qty before = pos.net;
         pos.net += signed_qty;
         if (pos.net == 0) {
             pos.avg_px_ticks = 0.0;
-        } else if ((pos.net > 0) != (pos.avg_px_ticks > 0 /*dummy*/)) {
+        } else if ((before > 0) != (pos.net > 0)) {
             // We flipped sides; the remaining qty was opened at fill_px.
             pos.avg_px_ticks = fill_px;
         }
-        // If we only reduced (did not flip), avg_px stays the same.
+        // If we only reduced (did not flip), avg_px stays the same, long or short.
     }
 }
 
