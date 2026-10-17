@@ -103,7 +103,8 @@ pip install databento
 export DATABENTO_API_KEY=...
 python3 tools/databento_feed.py --date 2026-10-16 --symbol ESZ6
 ./build/run_backtest data/es.ini data/es_feed.csv
-python3 tools/plot_pnl.py pnl.csv --out docs/pnl_es.png
+python3 tools/plot_pnl.py pnl.csv --out docs/pnl_es.png \
+    --title "ESZ6, 16 Oct 2026, regular hours" --tick-size 0.25 --tick-value 12.5
 ```
 
 `tools/databento_feed.py` pulls GLBX.MDP3 `mbp-1` for one contract over
