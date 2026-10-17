@@ -93,52 +93,74 @@ This produces:
 
 ## Run
 
-The repo ships with three synthetic top-of-book feeds in `data/` and a
-default config in `data/default.ini`.
+The backtest runs on real CME E-mini S&P 500 (ES) top of book from
+[Databento](https://databento.com). Market data is licensed, so the feed is
+not in the repo; pull it yourself with your own API key (one day costs about
+US$1.20):
 
 ```bash
-# Random walk (5000 events, mean-reverting, std=3 noise)
-./build/run_backtest data/default.ini data/sample_feed.csv
-
-# Stable mid (1-tick jitter; smoke test, expect 0 fills)
-./build/run_backtest data/default.ini data/stable_feed.csv
-
-# Sine oscillation (friendliest for an MM)
-./build/run_backtest data/default.ini data/oscillating_feed.csv
+pip install databento
+export DATABENTO_API_KEY=...
+python3 tools/databento_feed.py --date 2026-10-16 --symbol ESZ6
+./build/run_backtest data/es.ini data/es_feed.csv
+python3 tools/plot_pnl.py pnl.csv --out docs/pnl_es.png
 ```
+
+`tools/databento_feed.py` pulls GLBX.MDP3 `mbp-1` for one contract over
+regular hours (13:30 to 20:00 UTC), prints the Databento cost first and stops
+if it is over US$10. It writes `data/es_feed.csv` in the engine's format
+(`ts_ns,symbol,bid_px,bid_sz,ask_px,ask_sz`, prices in 0.25 ticks), one row
+per top-of-book change, skipping rows with a missing or crossed side. Without
+`--date` it takes the last weekday before today.
+
+`data/es.ini` is `data/default.ini` with `tick_size = 0.25`. One ES tick is
+US$12.50 per contract.
 
 Optional outputs (configured in the `.ini`): a PnL/inventory time series
 (`pnl.csv`) and a trade blotter (`trades.csv`).
 
 ## Sample output
 
-Running `./build/run_backtest data/default.ini data/sample_feed.csv` on the
-committed feed with the default config:
+ESZ6 (the front month) on Friday 16 October 2026, regular hours. The pull
+cost US$1.19 and gave 8,907,105 `mbp-1` records, of which 8,406,677 change
+the top of book. With `data/es.ini`:
 
 ```
-# loaded 5000 md events for symbol TEST
+# loaded 8406677 md events for symbol ESZ6
 
 === Backtest summary ===
-symbol              : TEST
-md events           : 5000
-orders submitted    : 6157
-fills               : 53
-ending position     : -10
-last mid (ticks)    : 9992
-realized PnL        : -2.2500  (-225.0000 ticks)
-unrealized PnL      : -0.3000  (-30.0000 ticks)
-total PnL           : -2.5500  (-255.0000 ticks)
-max drawdown        : 7.2500  (725.0000 ticks)
+symbol              : ESZ6
+md events           : 8406677
+orders submitted    : 556508
+fills               : 77
+ending position     : 10
+last mid (ticks)    : 30812
+realized PnL        : 546.0417  (2184.1667 ticks)
+unrealized PnL      : -20.0000  (-80.0000 ticks)
+total PnL           : 526.0417  (2104.1667 ticks)
+max drawdown        : 577.0833  (2308.3333 ticks)
 kill switch tripped : no
 ```
 
-These numbers are exactly reproducible. `data/sample_feed.csv` is committed, and
-`tools/generate_feed.py` regenerates it byte-for-byte from a fixed seed
-(`random.Random(42)`, 5000 events); the engine itself is deterministic because
-every event is ordered on a single timestamp-priority queue.
+PnL is in ticks times contracts (the first figure is ticks times
+`tick_size`, i.e. index points times contracts). At US$12.50 a tick, total
+PnL is about US$26,300 and the max drawdown about US$28,900. The run took
+about 20 minutes on an 8 GB laptop, because the engine holds the whole day
+in memory.
 
-Negative PnL is expected here. See *Limitations* below — this is a real
-adverse-selection effect, not a bug.
+![PnL on ESZ6, 16 Oct 2026](docs/pnl_es.png)
+
+Read this number with care:
+
+- **Fills are on touch with no queue position**, so PnL is optimistic. A
+  resting order fills as soon as the market reaches its price, as if it were
+  first in the queue. That day the touch held a median of about 25 contracts
+  on each side, all ahead of a new order, so many of these fills would not
+  happen.
+- **Most of the gain is direction, not spread.** ES fell about 100 points
+  that day and the strategy was net short for most of it (see the position
+  panel). On a day that rallied the same way, the result would likely flip.
+- One day, one contract, no fees.
 
 ## Tests
 
@@ -281,11 +303,10 @@ Roughly in order of value-for-effort:
 │   ├── tight.ini
 │   ├── wide.ini
 │   ├── debug.ini                   # trace-level logging
-│   ├── sample_feed.csv             # noisy random walk
-│   ├── stable_feed.csv             # 1-tick jitter (smoke test)
-│   └── oscillating_feed.csv        # sine wave (MM-friendly)
+│   └── es.ini                      # CME ES (0.25 tick)
 ├── docs/
-│   └── architecture.md             # extended design notes
+│   ├── architecture.md             # extended design notes
+│   └── pnl_es.png                  # PnL chart from the ES run
 ├── execution/
 │   ├── OMS.cpp                     # order state machine, position, PnL
 │   └── OMS.hpp
@@ -315,9 +336,7 @@ Roughly in order of value-for-effort:
 ├── third_party/
 │   └── catch.hpp                   # vendored single-header Catch2 v2.13.10
 └── tools/
-    ├── generate_feed.py            # synthetic feed generators (seeded)
-    ├── generate_oscillating_feed.py
-    ├── generate_stable_feed.py
+    ├── databento_feed.py           # Databento ES pull -> data/es_feed.csv
     └── plot_pnl.py                 # pnl.csv -> chart
 ```
 
