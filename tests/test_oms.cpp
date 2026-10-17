@@ -110,6 +110,45 @@ TEST_CASE("position updates: long then reduce realises PnL", "[oms]") {
     REQUIRE(oms.position(0).realized_pnl_ticks == Approx(30.0));
 }
 
+TEST_CASE("position updates: covering part of a short keeps its entry price", "[oms]") {
+    Recorder rec;
+    OMS oms(rec.fn());
+
+    // Sell 20 @ 100, then buy back 10 @ 90 (+100) and 10 @ 95 (+50).
+    OrderId s1 = oms.submit(10, 0, Side::Sell, 100, 20);
+    oms.on_fill(FillEvent{s1, 12, 100, 20, true});
+    OrderId b1 = oms.submit(20, 0, Side::Buy, 90, 10);
+    oms.on_fill(FillEvent{b1, 22, 90, 10, true});
+    REQUIRE(oms.position(0).net == -10);
+    REQUIRE(oms.position(0).avg_px_ticks == Approx(100.0));
+    REQUIRE(oms.position(0).realized_pnl_ticks == Approx(100.0));
+    REQUIRE(oms.position(0).unrealized(98) == Approx(20.0));
+
+    OrderId b2 = oms.submit(30, 0, Side::Buy, 95, 10);
+    oms.on_fill(FillEvent{b2, 32, 95, 10, true});
+    REQUIRE(oms.position(0).net == 0);
+    REQUIRE(oms.position(0).realized_pnl_ticks == Approx(150.0));
+}
+
+TEST_CASE("position updates: a flip opens the remainder at the fill price", "[oms]") {
+    Recorder rec;
+    OMS oms(rec.fn());
+
+    OrderId b1 = oms.submit(10, 0, Side::Buy, 100, 10);
+    oms.on_fill(FillEvent{b1, 12, 100, 10, true});
+    OrderId s1 = oms.submit(20, 0, Side::Sell, 104, 25);   // close 10 (+40), open 15 short
+    oms.on_fill(FillEvent{s1, 22, 104, 25, true});
+    REQUIRE(oms.position(0).net == -15);
+    REQUIRE(oms.position(0).avg_px_ticks == Approx(104.0));
+    REQUIRE(oms.position(0).realized_pnl_ticks == Approx(40.0));
+
+    OrderId b2 = oms.submit(30, 0, Side::Buy, 101, 20);    // close 15 (+45), open 5 long
+    oms.on_fill(FillEvent{b2, 32, 101, 20, true});
+    REQUIRE(oms.position(0).net == 5);
+    REQUIRE(oms.position(0).avg_px_ticks == Approx(101.0));
+    REQUIRE(oms.position(0).realized_pnl_ticks == Approx(85.0));
+}
+
 TEST_CASE("gross_open_qty sums leaves per symbol", "[oms]") {
     Recorder rec;
     OMS oms(rec.fn());
