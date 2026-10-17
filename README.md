@@ -122,6 +122,13 @@ Optional outputs (configured in the `.ini`): a PnL/inventory time series
 
 ## Sample output
 
+> **Correction pending re-run.** The figures below were produced before a fix to the
+> position accounting in `execution/OMS.cpp`: partly covering a short reset the entry
+> price to the cover price, and a flip from short to long kept the old short entry.
+> Both distort realised and unrealised PnL whenever the book is short, which it was for
+> most of this session. The fill count and order count are unaffected; the PnL and
+> drawdown need a re-run on the same feed.
+
 ESZ6 (the front month) on Friday 16 October 2026, regular hours. The pull
 cost US$1.19 and gave 8,907,105 `mbp-1` records, of which 8,406,677 change
 the top of book. With `data/es.ini`:
@@ -169,7 +176,7 @@ Read this number with care:
 ## Tests
 
 ```bash
-./build/unit_tests           # 30 cases, 119 assertions
+./build/unit_tests           # 32 cases, 131 assertions
 ctest --test-dir build       # equivalent through CTest
 ```
 
@@ -208,6 +215,26 @@ inv_skew          = 0.05
 requote_thresh    = 1
 ```
 
+## Queue-aware replay (OCaml) and markouts (kdb+/q)
+
+`ocaml/` is a second implementation of the backtest. With the C++ fill rules it
+reproduces `run_backtest`'s fill blotter byte for byte (`ocaml/crosscheck.sh`: every
+config in `data/`, three feeds each), and it adds two fill rules that track queue
+position from the exchange's trade prints, so a resting order fills only once the
+volume ahead of it has traded. It also contains a price-time matching engine tested
+against a naive reference book with QCheck. See [ocaml/README.md](ocaml/README.md).
+
+`analytics/markouts.q` measures each fill's markout (side × (mid h later − fill
+price)) at 0 ms to 5 minutes with an as-of join, plus the worst and best mid over the
+following minute with a window join; `analytics/markouts.py` is the same table in
+pandas. Run it on blotters from different fill rules to see how much of the touch
+rule's PnL is adverse selection:
+
+```bash
+q analytics/markouts.q -feed data/es_feed.csv -fills trades.csv
+python3 analytics/markouts.py --feed data/es_feed.csv --fills trades.csv
+```
+
 ## Limitations and assumptions
 
 This is an educational prototype. Its limits:
@@ -217,10 +244,10 @@ This is an educational prototype. Its limits:
    `OrderBook` class supports `apply_level()` for L2 updates, so plugging in
    a real L2 feed is mechanical, but the simulator currently uses only ToB.
 
-2. **No trade prints.** A real exchange feed includes prints showing
-   incoming aggressors. The simulator infers fills from quote movement,
-   which understates fill rates for orders sitting at the touch on a real
-   exchange.
+2. **No trade prints in the C++ engine.** A real exchange feed includes
+   prints showing incoming aggressors. The C++ simulator infers fills from
+   quote movement. `tools/databento_feed.py --trades-out` writes the prints,
+   and the OCaml replay in `ocaml/` uses them.
 
 3. **Passive fill model.** Two settings:
    - `fill_on_touch = true` (default): a resting buy at p fills when
@@ -246,10 +273,11 @@ This is an educational prototype. Its limits:
 6. **No fees, no rebates, no borrow/funding.** PnL is purely
    price-difference on filled qty. Add a fee model in `OMS::on_fill`.
 
-7. **No queue-position model.** A real MM's edge is heavily about how
-   far back in the queue you are at each price level. We assume infinite
-   liquidity at our limit price (full fill on touch, no partials from
-   exhausted queue depth).
+7. **No queue-position model in the C++ engine.** A real MM's edge is
+   heavily about how far back in the queue you are at each price level. The
+   C++ simulator assumes infinite liquidity at our limit price (full fill on
+   touch, no partials). `ocaml/` replays the same strategy with queue
+   position tracked from trade prints and partial fills.
 
 8. **The "low latency" in the project name is aspirational.** The hot
    path uses `std::map`, `std::unordered_map`, and `std::variant`, which
@@ -261,15 +289,16 @@ This is an educational prototype. Its limits:
 
 Roughly in order of value-for-effort:
 
-1. **Trade-print events.** Extend the feed format with optional trade
-   prints; route them as a `TradeEvent` and let the simulator decide
-   passive fills based on actual aggression rather than quote movement.
+1. **Queue-aware fills in C++.** Port the two queue rules from
+   `ocaml/lib/exchange.ml` into `ExchangeSimulator`, fed by `TradeEvent`s.
 2. **Multiple strategies / multiple symbols.** Driver already keys
    everything by `SymbolId`; mostly a matter of registering N strategies.
 3. **Latency jitter.** Replace constant latency with a `std::function<Timestamp()>`
    distribution.
-4. **Queue-position model.** Track simulated queue ahead at each level,
-   decay it on volume, deduce partial fills.
+4. **Linear-time risk checks.** `RiskManager::check_new_order` scans every
+   order the OMS has ever seen, which makes a full session quadratic; the
+   OCaml OMS keeps live orders in their own table and runs about a hundred
+   times faster on the same feed.
 5. **Real feed plug-in.** Replace `CsvFeedReader` with a Databento or LOBSTER
    reader; the rest of the pipeline doesn't change.
 6. **Better data structures on the hot path.** Replace `std::map` with
@@ -286,6 +315,9 @@ Roughly in order of value-for-effort:
 ├── CMakeLists.txt
 ├── LICENSE
 ├── README.md
+├── analytics/
+│   ├── markouts.q                  # fill markouts with aj / wj (kdb+/q)
+│   └── markouts.py                 # the same in pandas
 ├── apps/
 │   └── run_backtest.cpp            # CLI entry point
 ├── backtest/
@@ -317,6 +349,11 @@ Roughly in order of value-for-effort:
 ├── market_data/
 │   ├── CsvFeedReader.cpp           # CSV reader, symbol interning
 │   └── CsvFeedReader.hpp
+├── ocaml/                          # lobsim: matching engine, queue-aware replay (see its README)
+│   ├── lib/                        # engine, OMS, risk, exchange fill rules, market maker, driver
+│   ├── bin/                        # lobsim-replay, lobsim-bench, lobsim-gen-feed
+│   ├── test/                       # QCheck properties, fill-rule scenarios
+│   └── crosscheck.sh               # byte-for-byte comparison with run_backtest
 ├── orderbook/
 │   ├── OrderBook.cpp               # top of book + depth
 │   └── OrderBook.hpp
@@ -340,7 +377,7 @@ Roughly in order of value-for-effort:
 ├── third_party/
 │   └── catch.hpp                   # vendored single-header Catch2 v2.13.10
 └── tools/
-    ├── databento_feed.py           # Databento ES pull -> data/es_feed.csv
+    ├── databento_feed.py           # Databento ES pull -> data/es_feed.csv (+ trade prints)
     └── plot_pnl.py                 # pnl.csv -> chart
 ```
 
