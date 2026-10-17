@@ -1,0 +1,16 @@
+build/
+*.o
+*.a
+*.out
+cmake-build-*/
+.DS_Store
+pnl.csv
+trades.csv
+*.log
+
+# Generated charts (tools/plot_pnl.py defaults to pnl.png); docs images are kept.
+*.png
+!docs/*.png
+
+# Market data feeds (pulled locally, never committed)
+data/*.csv
