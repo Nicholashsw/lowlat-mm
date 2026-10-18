@@ -201,7 +201,7 @@ Read these numbers with care:
 - **It requotes far too often.** 556,508 orders for 77 fills, because it
   requotes on nearly every top-of-book change. A real exchange's messaging
   limits would not allow that.
-- One day, one contract, no fees.
+- One contract, no fees.
 
 ## Tests
 
