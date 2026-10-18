@@ -1,0 +1,5 @@
+(executables
+ (names replay bench gen_feed)
+ (public_names lobsim-replay lobsim-bench lobsim-gen-feed)
+ (package lobsim)
+ (libraries lobsim unix))

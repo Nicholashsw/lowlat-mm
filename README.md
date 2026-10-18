@@ -124,7 +124,7 @@ Optional outputs (configured in the `.ini`): a PnL/inventory time series
 
 ESZ6 (the front month) on Friday 16 October 2026, regular hours. The pull
 cost US$1.19 and gave 8,907,105 `mbp-1` records, of which 8,406,677 change
-the top of book. With `data/es.ini`:
+the top of book, and 500,392 trade prints. With `data/es.ini`:
 
 ```
 # loaded 8406677 md events for symbol ESZ6
@@ -136,31 +136,46 @@ orders submitted    : 556508
 fills               : 77
 ending position     : 10
 last mid (ticks)    : 30812
-realized PnL        : 546.0417  (2184.1667 ticks)
+realized PnL        : 622.5000  (2490.0000 ticks)
 unrealized PnL      : -20.0000  (-80.0000 ticks)
-total PnL           : 526.0417  (2104.1667 ticks)
-max drawdown        : 577.0833  (2308.3333 ticks)
+total PnL           : 602.5000  (2410.0000 ticks)
+max drawdown        : 552.5000  (2210.0000 ticks)
 kill switch tripped : no
 ```
 
 PnL is in ticks times contracts (the first figure is ticks times
 `tick_size`, i.e. index points times contracts). At US$12.50 a tick, total
-PnL is about US$26,300 and the max drawdown about US$28,900. The run took
-about 20 minutes on an 8 GB laptop, because the engine holds the whole day
-in memory.
+PnL is about US$30,100 and the max drawdown about US$27,600. The run took
+about 18 minutes on an 8 GB laptop. The OCaml replay with the touch rule
+gives the same summary and a byte-identical fill blotter in 11 seconds.
 
 ![PnL on ESZ6, 16 Oct 2026](docs/pnl_es.png)
 
-Read this number with care:
+The same day and config under each fill rule, through `ocaml/` with the
+trade prints. Markouts are mean ticks per fill (`analytics/markouts.py`):
+side times (mid at fill time plus the horizon, minus the fill price).
 
-- **Fills are on touch with no queue position**, so PnL is optimistic. A
-  resting order fills as soon as the market reaches its price, as if it were
-  first in the queue. That day the touch held a median of about 25 contracts
-  on each side, all ahead of a new order, so many of these fills would not
-  happen.
-- **Most of the gain is direction, not spread.** ES fell about 100 points
-  that day and the strategy was net short for most of it (see the position
-  panel). On a day that rallied the same way, the result would likely flip.
+| Fill rule | Fills | Contracts | Total PnL | Max drawdown | 0 ms | 1 s | 1 m | 5 m |
+|---|---|---|---|---|---|---|---|---|
+| `touch` (the C++ default) | 77 | 770 | US$30,125 | US$27,625 | -0.94 | -0.33 | -1.53 | +1.16 |
+| `through` | 31 | 310 | -US$13,375 | US$37,250 | -1.84 | -1.08 | -1.82 | -4.66 |
+| `queue-proportional` | 117 | 1,112 | -US$4,663 | US$29,325 | +1.33 | -0.64 | -1.33 | -0.56 |
+| `queue-behind` | 118 | 1,112 | -US$4,663 | US$29,325 | +1.31 | -0.62 | -1.71 | -0.53 |
+
+The queue rules count partial fills separately, so they show more fills
+than the touch rule.
+
+Read these numbers with care:
+
+- **The touch rule's gain does not survive queue position.** With the
+  orders filled only once the volume ahead of them has traded, the same
+  quotes lose about US$4,700. The touch fills start out under water (a
+  0 ms markout of -0.94 ticks): the order fills only after the market has
+  already reached its price.
+- **Most of the touch gain is direction, not spread.** ES fell about 100
+  points that day and the strategy was net short for most of it (see the
+  position panel). On a day that rallied the same way, the result would
+  likely flip.
 - **It requotes far too often.** 556,508 orders for 77 fills, because it
   requotes on nearly every top-of-book change. A real exchange's messaging
   limits would not allow that.
@@ -169,7 +184,7 @@ Read this number with care:
 ## Tests
 
 ```bash
-./build/unit_tests           # 30 cases, 119 assertions
+./build/unit_tests           # 32 cases, 131 assertions
 ctest --test-dir build       # equivalent through CTest
 ```
 
@@ -208,6 +223,26 @@ inv_skew          = 0.05
 requote_thresh    = 1
 ```
 
+## Queue-aware replay (OCaml) and markouts (kdb+/q)
+
+`ocaml/` is a second implementation of the backtest. With the C++ fill rules it
+reproduces `run_backtest`'s fill blotter byte for byte (`ocaml/crosscheck.sh`: every
+config in `data/`, three feeds each), and it adds two fill rules that track queue
+position from the exchange's trade prints, so a resting order fills only once the
+volume ahead of it has traded. It also contains a price-time matching engine tested
+against a naive reference book with QCheck. See [ocaml/README.md](ocaml/README.md).
+
+`analytics/markouts.q` measures each fill's markout (side × (mid h later − fill
+price)) at 0 ms to 5 minutes with an as-of join, plus the worst and best mid over the
+following minute with a window join; `analytics/markouts.py` is the same table in
+pandas. Run it on blotters from different fill rules to see how much of the touch
+rule's PnL is adverse selection:
+
+```bash
+q analytics/markouts.q -feed data/es_feed.csv -fills trades.csv
+python3 analytics/markouts.py --feed data/es_feed.csv --fills trades.csv
+```
+
 ## Limitations and assumptions
 
 This is an educational prototype. Its limits:
@@ -217,10 +252,10 @@ This is an educational prototype. Its limits:
    `OrderBook` class supports `apply_level()` for L2 updates, so plugging in
    a real L2 feed is mechanical, but the simulator currently uses only ToB.
 
-2. **No trade prints.** A real exchange feed includes prints showing
-   incoming aggressors. The simulator infers fills from quote movement,
-   which understates fill rates for orders sitting at the touch on a real
-   exchange.
+2. **No trade prints in the C++ engine.** A real exchange feed includes
+   prints showing incoming aggressors. The C++ simulator infers fills from
+   quote movement. `tools/databento_feed.py --trades-out` writes the prints,
+   and the OCaml replay in `ocaml/` uses them.
 
 3. **Passive fill model.** Two settings:
    - `fill_on_touch = true` (default): a resting buy at p fills when
@@ -246,10 +281,11 @@ This is an educational prototype. Its limits:
 6. **No fees, no rebates, no borrow/funding.** PnL is purely
    price-difference on filled qty. Add a fee model in `OMS::on_fill`.
 
-7. **No queue-position model.** A real MM's edge is heavily about how
-   far back in the queue you are at each price level. We assume infinite
-   liquidity at our limit price (full fill on touch, no partials from
-   exhausted queue depth).
+7. **No queue-position model in the C++ engine.** A real MM's edge is
+   heavily about how far back in the queue you are at each price level. The
+   C++ simulator assumes infinite liquidity at our limit price (full fill on
+   touch, no partials). `ocaml/` replays the same strategy with queue
+   position tracked from trade prints and partial fills.
 
 8. **The "low latency" in the project name is aspirational.** The hot
    path uses `std::map`, `std::unordered_map`, and `std::variant`, which
@@ -261,15 +297,16 @@ This is an educational prototype. Its limits:
 
 Roughly in order of value-for-effort:
 
-1. **Trade-print events.** Extend the feed format with optional trade
-   prints; route them as a `TradeEvent` and let the simulator decide
-   passive fills based on actual aggression rather than quote movement.
+1. **Queue-aware fills in C++.** Port the two queue rules from
+   `ocaml/lib/exchange.ml` into `ExchangeSimulator`, fed by `TradeEvent`s.
 2. **Multiple strategies / multiple symbols.** Driver already keys
    everything by `SymbolId`; mostly a matter of registering N strategies.
 3. **Latency jitter.** Replace constant latency with a `std::function<Timestamp()>`
    distribution.
-4. **Queue-position model.** Track simulated queue ahead at each level,
-   decay it on volume, deduce partial fills.
+4. **Linear-time risk checks.** `RiskManager::check_new_order` scans every
+   order the OMS has ever seen, which makes a full session quadratic; the
+   OCaml OMS keeps live orders in their own table and runs about a hundred
+   times faster on the same feed.
 5. **Real feed plug-in.** Replace `CsvFeedReader` with a Databento or LOBSTER
    reader; the rest of the pipeline doesn't change.
 6. **Better data structures on the hot path.** Replace `std::map` with
@@ -286,6 +323,9 @@ Roughly in order of value-for-effort:
 ├── CMakeLists.txt
 ├── LICENSE
 ├── README.md
+├── analytics/
+│   ├── markouts.q                  # fill markouts with aj / wj (kdb+/q)
+│   └── markouts.py                 # the same in pandas
 ├── apps/
 │   └── run_backtest.cpp            # CLI entry point
 ├── backtest/
@@ -317,6 +357,11 @@ Roughly in order of value-for-effort:
 ├── market_data/
 │   ├── CsvFeedReader.cpp           # CSV reader, symbol interning
 │   └── CsvFeedReader.hpp
+├── ocaml/                          # lobsim: matching engine, queue-aware replay (see its README)
+│   ├── lib/                        # engine, OMS, risk, exchange fill rules, market maker, driver
+│   ├── bin/                        # lobsim-replay, lobsim-bench, lobsim-gen-feed
+│   ├── test/                       # QCheck properties, fill-rule scenarios
+│   └── crosscheck.sh               # byte-for-byte comparison with run_backtest
 ├── orderbook/
 │   ├── OrderBook.cpp               # top of book + depth
 │   └── OrderBook.hpp
@@ -340,7 +385,7 @@ Roughly in order of value-for-effort:
 ├── third_party/
 │   └── catch.hpp                   # vendored single-header Catch2 v2.13.10
 └── tools/
-    ├── databento_feed.py           # Databento ES pull -> data/es_feed.csv
+    ├── databento_feed.py           # Databento ES pull -> data/es_feed.csv (+ trade prints)
     └── plot_pnl.py                 # pnl.csv -> chart
 ```
 
