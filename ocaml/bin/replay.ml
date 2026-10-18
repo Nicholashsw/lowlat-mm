@@ -11,10 +11,12 @@
 
 open Lobsim
 
-let usage = "lobsim-replay CONFIG QUOTES [--trades FILE] [--fill MODEL] [--trades-out FILE] [--pnl-out FILE]"
+let usage =
+  "lobsim-replay CONFIG QUOTES [--trades FILE] [--fill MODEL] [--trades-out FILE] [--pnl-out FILE] [--micro K,LIMIT,THETA]"
 
 let () =
   let trades = ref None and fill = ref None and trades_out = ref None and pnl_out = ref None in
+  let micro = ref None in
   let positional = ref [] in
   let spec =
     [
@@ -22,6 +24,13 @@ let () =
       ("--fill", Arg.String (fun s -> fill := Some (Exchange.model_of_string s)), "MODEL fill rule");
       ("--trades-out", Arg.String (fun s -> trades_out := Some s), "FILE write the fill blotter");
       ("--pnl-out", Arg.String (fun s -> pnl_out := Some s), "FILE write the PnL path");
+      ( "--micro",
+        Arg.String
+          (fun s ->
+            match String.split_on_char ',' s with
+            | [ k; l; th ] -> micro := Some (int_of_string k, int_of_string l, float_of_string th)
+            | _ -> raise (Arg.Bad "--micro K,LIMIT,THETA")),
+        "K,LIMIT,THETA use the microprice quoting rule" );
     ]
   in
   Arg.parse spec (fun s -> positional := s :: !positional) usage;
@@ -34,6 +43,11 @@ let () =
   in
   let cfg, tick = Backtest.of_ini ini in
   let cfg = match !fill with Some m -> { cfg with exchange = { cfg.exchange with model = m } } | None -> cfg in
+  let cfg =
+    match !micro with
+    | Some (k, limit, theta) -> { cfg with mm = { cfg.mm with quoting = Market_maker.Micro { k; limit; theta } } }
+    | None -> cfg
+  in
   (match (cfg.exchange.model, !trades) with
   | (Exchange.Queue_behind | Exchange.Queue_proportional), None ->
       prerr_endline "the queue fill rules need --trades";

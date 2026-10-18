@@ -49,6 +49,13 @@ let of_ini path =
       exchange = { ack_latency = i "ack_latency_ns" 50_000; fill_latency = i "fill_latency_ns" 50_000; model };
       mm =
         {
+          quoting =
+            (match Config.str c "quoting" ~default:"baseline" with
+            | "baseline" -> Market_maker.Baseline
+            | "micro" ->
+                Market_maker.Micro
+                  { k = i "inv_shift_ticks" 1; limit = i "inv_limit" 20; theta = f "imbalance_theta" 0.5 }
+            | s -> invalid_arg ("unknown quoting rule: " ^ s));
           half_spread = i "half_spread_ticks" 2;
           min_spread = i "min_spread_ticks" 1;
           quote_size = i "quote_size" 10;
