@@ -187,6 +187,44 @@ about US$5,000 and the move explains 58% of the variance. 16 October, the single
 above, was the sample's largest fall (ES -99.75), so its gain was the luckiest case, not
 a typical one.
 
+### A better quoting rule
+
+`ocaml/` now has a second quoting rule next to the baseline (`--micro K,LIMIT,THETA`,
+or `quoting = micro` in an ini): fair value is the microprice, quotes join the touch and
+move only when fair value has moved a tick, both quotes step k ticks away from the side
+that adds exposure per 10 contracts held with a hard limit of L contracts, and the side
+the book leans against is pulled when imbalance passes θ. The test was pre-registered
+in `results/quoting/PREREG.md`: 27 combinations of k, L and θ tuned on the first 10
+sessions (18 September to 1 October) by mean daily PnL under queue-behind, then run once
+on the last 11 (2 to 16 October). `tools/quoting_study.py` reproduces it from the cached
+feeds.
+
+Every one of the 27 combinations lost money in training; the least bad was the most
+restrictive, k 0, L 10, θ 0.3 (`results/quoting/grid.csv`). On the 11 test sessions:
+
+| Quoting | Fill rule | Mean daily PnL | Median | t | Days positive | Markout 0 ms / 1 s / 1 m / 5 m | Per point of ES move (t) | Flat-day PnL (t) | R² |
+|---|---|---|---|---|---|---|---|---|---|
+| Baseline | `touch` | -US$5,239 | -US$6,375 | -0.59 | 4 of 11 | -1.28 / -0.66 / -1.05 / +0.04 | -US$462 (-2.86) | -US$5,927 (-0.87) | 0.48 |
+| Baseline | `through` | -US$7,295 | US$1,875 | -0.70 | 6 of 11 | -2.26 / -1.18 / -1.63 / -1.68 | -US$177 (-0.70) | -US$7,558 (-0.71) | 0.05 |
+| Baseline | `queue-proportional` | -US$4,132 | -US$6,200 | -0.69 | 4 of 11 | +1.25 / -0.15 / +0.14 / +0.20 | -US$211 (-1.60) | -US$4,446 (-0.80) | 0.22 |
+| Baseline | `queue-behind` | -US$5,003 | -US$4,662 | -0.95 | 4 of 11 | +1.25 / -0.13 / +0.20 / +0.37 | -US$165 (-1.38) | -US$5,249 (-1.04) | 0.18 |
+| New (k 0, L 10, θ 0.3) | `touch` | -US$92,227 | -US$80,000 | -4.87 | 1 of 11 | -0.52 / -0.23 / -0.23 / -0.25 | US$480 (1.08) | -US$91,513 (-4.87) | 0.11 |
+| New (k 0, L 10, θ 0.3) | `through` | -US$19,352 | -US$11,875 | -3.23 | 2 of 11 | -1.57 / -1.22 / -1.37 / -0.74 | US$195 (1.45) | -US$19,062 (-3.35) | 0.19 |
+| New (k 0, L 10, θ 0.3) | `queue-proportional` | -US$68,488 | -US$55,800 | -5.17 | 0 of 11 | -0.33 / -0.18 / -0.17 / -0.21 | US$436 (1.47) | -US$67,838 (-5.40) | 0.19 |
+| New (k 0, L 10, θ 0.3) | `queue-behind` | -US$70,928 | -US$56,550 | -4.87 | 0 of 11 | -0.36 / -0.20 / -0.20 / -0.22 | US$514 (1.60) | -US$70,164 (-5.18) | 0.22 |
+
+Markouts are mean ticks per fill. The new rule is much worse. Joining the touch with 10
+contracts trades about 26,000 contracts a day under queue-behind against about 900 for
+the baseline, and its fills lose about 0.2 ticks within a second and keep it: when an
+order at the touch fills from the queue, the price is usually about to move through it.
+That loss times the volume is the whole result (about -US$69,000 a day implied, against
+-US$70,900 measured). The baseline quotes behind the touch, fills rarely, and its fills
+keep their edge at 1 minute and 5 minutes. With 47 tests counted the Bonferroni bar is
+|t| > 4.55; the new rule's losses against the baseline clear it under the two
+queue rules (t of the daily difference -4.77 and -4.87), so the result is not noise.
+The new rule does not beat the baseline's markouts, so it was not ported to C++, and
+`crosscheck.sh` is unchanged.
+
 Read these numbers with care:
 
 - **The touch rule's gain does not survive queue position.** With the
