@@ -14,3 +14,4 @@ trades.csv
 
 # Market data feeds (pulled locally, never committed)
 data/*.csv
+__pycache__/
