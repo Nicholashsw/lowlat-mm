@@ -350,7 +350,3 @@ Roughly in order of value-for-effort:
 [Catch2](https://github.com/catchorg/Catch2) v2.13.10 test framework, used
 unmodified under the Boost Software License 1.0. Everything else in this
 repository is covered by [`LICENSE`](LICENSE) (MIT).
-
----
-
-Nicholas Hong | Built for educational and research purposes. Not financial advice.
