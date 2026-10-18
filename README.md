@@ -165,6 +165,28 @@ side times (mid at fill time plus the horizon, minus the fill price).
 The queue rules count partial fills separately, so they show more fills
 than the touch rule.
 
+### Twenty-one sessions
+
+The same config and the four rules on every regular session from 18 September to 16
+October 2026 (21 sessions: Columbus Day traded normally), each day starting flat. The
+pulls cost US$15.69 in all. `tools/multiday.py` reproduces this; the per-day figures are
+in `results/multiday_summary.csv`, with ES's open-to-close change in points.
+
+| Fill rule | Mean daily PnL | Median | Days positive | t (mean) | Per point of ES move (t) | Flat-day PnL (t) | R² |
+|---|---|---|---|---|---|---|---|
+| `touch` | -US$7,310 | -US$6,375 | 7 of 21 | -1.28 | -US$499 (-5.11) | -US$8,074 (-2.12) | 0.58 |
+| `through` | -US$9,780 | -US$5,125 | 8 of 21 | -1.63 | -US$253 (-1.72) | -US$10,166 (-1.78) | 0.13 |
+| `queue-proportional` | -US$4,451 | -US$4,662 | 9 of 21 | -0.84 | -US$369 (-3.33) | -US$5,016 (-1.16) | 0.37 |
+| `queue-behind` | -US$5,055 | -US$4,375 | 9 of 21 | -1.00 | -US$334 (-3.06) | -US$5,565 (-1.31) | 0.33 |
+
+The last three columns are the OLS of daily PnL on ES's open-to-close change: the slope
+is US$ per index point, the intercept the PnL on a flat day. Every rule loses money on
+average, and none significantly. Most of the day-to-day swing is direction: the strategy
+sells into rallies and buys into selloffs, so under the touch rule a 10-point rise costs
+about US$5,000 and the move explains 58% of the variance. 16 October, the single day
+above, was the sample's largest fall (ES -99.75), so its gain was the luckiest case, not
+a typical one.
+
 Read these numbers with care:
 
 - **The touch rule's gain does not survive queue position.** With the
