@@ -12,7 +12,7 @@ It has three parts.
 
 With the touch or through rule, `lobsim-replay` produces a byte-identical fill blotter and an identical summary to `build/run_backtest`. `crosscheck.sh` checks this for every config in `data/` on three synthetic feeds each (24 runs, up to 2,369 fills per run). It is about a hundred times faster on the same feed (0.2 s against 19.4 s for 200,000 events), mainly because the C++ OMS scans every order it has ever seen on each risk check, which makes a full session quadratic, while the OCaml OMS keeps live orders in their own table.
 
-Writing the port turned up a bug in the C++ position accounting, now fixed in `execution/OMS.cpp` with two regression tests: partly covering a short reset the entry price to the cover price, and flipping from short to long kept the old short entry price. Both distort realised and unrealised PnL whenever the book is short, so the published ESZ6 figures need a re-run.
+Writing the port turned up a bug in the C++ position accounting, now fixed in `execution/OMS.cpp` with two regression tests: partly covering a short reset the entry price to the cover price, and flipping from short to long kept the old short entry price. Both distort realised and unrealised PnL whenever the book is short; the ESZ6 figures in the main README are from after the fix.
 
 ## The fill rules
 
